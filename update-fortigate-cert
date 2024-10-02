@@ -65,6 +65,7 @@ import base64
 import datetime
 import time
 import urllib.parse
+import os
 
 import requests
 
@@ -146,6 +147,21 @@ class Fortigate:
             raise ApiRequestError(
                 "Failed to upload new certificate, the details are:\n {}".format(response.text))
 
+    def set_ssl_vpn_certificate(self, name, verify=True):
+        """Updates the Fortigate configuration to use a named certificate for SSL VPN."""
+        url = self._api("cmdb/vpn.ssl/settings")
+        set_default_body = {'servercert': {'q_origin_key': name}}
+        try:
+            response = requests.put(url, json=set_default_body, verify=verify)
+            if response.status_code != 200:
+                raise ApiRequestError(
+                    "Failed to set default certificate, the details are:\n {}".format(
+                        response.text))
+        except requests.exceptions.ConnectionError:
+            # The connection is often closed when the setting is updated,
+            # so assume this means a success
+            pass
+
     def set_https_mgmt_certificate(self, name, verify=True):
         """Updates the Fortigate configuration to use a named certificate for HTTPS management."""
         url = self._api("cmdb/system/global")
@@ -219,16 +235,19 @@ def _main():
     api_key = open(args.api_key_file, "r").read().strip()
     forti = Fortigate(args.hostname, api_key)
     cert_ca = open(args.chain, "rb").read()   # Only support a single intermediate CA for now
-    cert_leaf = open(args.cert, "rb").read()
+    cert_leaf = open(args.chain, "rb").read()
     cert_privkey = open(args.privkey, "rb").read()
     setup_verify_cert = not args.no_verify
-    cert_name = datetime.datetime.now().strftime(args.cert_name_format)
+    cert_path = args.cert
+    cert_file_name = os.path.splitext(os.path.basename(cert_path))
+    cert_name = datetime.datetime.fromtimestamp(os.path.getmtime(cert_path)).strftime(cert_file_name[0] + "_%Y%m%d")
     prune_prefix = args.prune_prefix
 
     # Import and set the HTTPS certificate to be used
-    forti.import_intermediate_ca(cert_ca, verify=setup_verify_cert)
+    # forti.import_intermediate_ca(cert_ca, verify=setup_verify_cert)
     if not forti.certificate_exists(cert_name, verify=setup_verify_cert):
         forti.import_leaf_certificate(cert_name, cert_leaf, cert_privkey, verify=setup_verify_cert)
+    forti.set_ssl_vpn_certificate(cert_name, verify=setup_verify_cert)
     forti.set_https_mgmt_certificate(cert_name, verify=setup_verify_cert)
 
     # Use certificate verification to test connection for real now
