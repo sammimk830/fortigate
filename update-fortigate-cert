@@ -251,20 +251,20 @@ def _main():
     forti.set_https_mgmt_certificate(cert_name, verify=setup_verify_cert)
 
     # Use certificate verification to test connection for real now
-    if not forti.get_https_mgmt_certificate() == cert_name:
+    if not forti.get_https_mgmt_certificate(verify=setup_verify_cert) == cert_name:
         raise Error("Read-back validation of HTTPS management certificate failed")
 
-    if prune_prefix == "":
+    if cert_file_name[0] == "":
         return
 
     # Remove old expired certificates matching our prune prefix
-    for cert in forti.get_expired_certificates():
-        if cert.startswith(prune_prefix):
+    for cert in forti.get_expired_certificates(verify=setup_verify_cert):
+        if cert.startswith(cert_file_name[0]):
             # Try to remove expired certificates, but do it best-effort and ignore errors.
             # Errors might be related to the certificate being in use for example, which
             # requires an operator to fix anyway and is easy to spot in the Fortigate web UI.
             try:
-                forti.delete_certificate(cert)
+                forti.delete_certificate(cert, verify=setup_verify_cert)
             except ApiRequestError:
                 pass
     # All good!
